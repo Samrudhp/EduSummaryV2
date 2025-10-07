@@ -32,31 +32,55 @@ class RAGService:
         self._initialize_embeddings()
     
     def _initialize_embeddings(self):
-        """Initialize sentence-transformers embeddings"""
+        """Initialize sentence-transformers embeddings - uses cache automatically"""
+        if self.embeddings is not None:
+            print("Embeddings model already loaded (using cached instance)")
+            return
+            
         print("Loading embeddings model (all-mpnet-base-v2)...")
+        # HuggingFace models are automatically cached in ~/.cache/huggingface/
+        # No need to re-download if already cached
+        cache_folder = os.path.expanduser("~/.cache/huggingface/hub")
+        
         self.embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-mpnet-base-v2",
             model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True}
+            encode_kwargs={'normalize_embeddings': True},
+            cache_folder=cache_folder
         )
-        print("Embeddings model loaded successfully!")
+        print("Embeddings model loaded successfully (cached for future use)!")
     
     def _initialize_llm(self):
-        """Initialize GPT4All LLM"""
-        if self.llm is None:
-            print("Loading GPT4All-MPT model...")
-            # Download model if not exists
-            model_name = "orca-mini-3b-gguf2-q4_0.gguf"
-            model_file = os.path.join(self.model_path, model_name)
+        """Initialize GPT4All LLM - downloads once and caches"""
+        if self.llm is not None:
+            print("GPT4All model already loaded (using cached instance)")
+            return
             
-            self.llm = GPT4All(
-                model=model_file,
-                max_tokens=2048,
-                temp=0.7,
-                n_ctx=2048,
-                verbose=False
-            )
-            print("GPT4All model loaded successfully!")
+        print("Initializing GPT4All model...")
+        
+        # Model will be auto-downloaded to ~/.cache/gpt4all/ if not present
+        # Specify model name - GPT4All handles caching automatically
+        model_name = "orca-mini-3b-gguf2-q4_0.gguf"
+        
+        # Check if model exists in cache
+        gpt4all_cache = os.path.expanduser("~/.cache/gpt4all/")
+        cached_model_path = os.path.join(gpt4all_cache, model_name)
+        
+        if os.path.exists(cached_model_path):
+            print(f"Using cached GPT4All model from: {cached_model_path}")
+        else:
+            print(f"Downloading GPT4All model (one-time download ~2GB)...")
+            print(f"Model will be cached at: {gpt4all_cache}")
+        
+        # GPT4All will use the model from cache or download if needed
+        self.llm = GPT4All(
+            model=model_name,  # Just model name - GPT4All handles cache lookup
+            max_tokens=2048,
+            temp=0.7,
+            n_ctx=2048,
+            verbose=False
+        )
+        print("GPT4All model loaded successfully (cached for future use)!")
     
     def create_vectorstore(self, chunks: List[Dict], textbook_name: str):
         """Create and persist FAISS vectorstore"""

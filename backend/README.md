@@ -24,15 +24,29 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Download GPT4All Model
+### 3. Model Caching (Automatic)
 
-The system will automatically download the GPT4All model on first use, or you can manually download:
+**Important:** Models are automatically downloaded and cached on first use. They will NOT be re-downloaded in future runs.
+
+**Cache Locations:**
+- **Embeddings Model** (~300MB): `~/.cache/huggingface/`
+- **GPT4All Model** (~2GB): `~/.cache/gpt4all/`
+
+**First Run:** Downloads models (one-time, ~10-15 minutes)
+**Subsequent Runs:** Uses cached models (instant loading)
+
+#### Optional: Pre-download Models
+
+To download models before starting the server:
 
 ```bash
-mkdir -p models
-# Download from: https://gpt4all.io/models/gguf/orca-mini-3b-gguf2-q4_0.gguf
-# Place in ./models/ directory
+python setup_models.py
 ```
+
+This will:
+- ✅ Download and cache the embeddings model
+- ✅ Download and cache the GPT4All model
+- ✅ Verify everything is ready
 
 ### 4. Run the Server
 
@@ -125,6 +139,7 @@ Ask a free-form question
 ```
 backend/
 ├── main.py                 # FastAPI application
+├── setup_models.py         # Pre-download models script
 ├── requirements.txt        # Python dependencies
 ├── models/
 │   └── schemas.py         # Pydantic models
@@ -139,7 +154,39 @@ backend/
 
 ## Notes
 
-- First run will download the embeddings model (~300MB) and GPT4All model (~2GB)
+- **Model Caching**: Models are downloaded ONCE and cached in `~/.cache/`
+  - Embeddings: `~/.cache/huggingface/` (~300MB)
+  - GPT4All: `~/.cache/gpt4all/` (~2GB)
+- **First run**: Downloads models (10-15 minutes, one-time only)
+- **Subsequent runs**: Uses cached models (instant, no re-download)
 - Processing large textbooks (200-300 pages) may take 2-5 minutes
 - The system runs entirely locally on CPU
 - FAISS index is persisted to disk for quick restarts
+
+## Troubleshooting
+
+### Models Keep Re-downloading?
+
+If models seem to re-download, check:
+
+```bash
+# Check if cache directories exist
+ls -la ~/.cache/huggingface/
+ls -la ~/.cache/gpt4all/
+
+# If directories are missing, run setup script
+python setup_models.py
+```
+
+### Clear Model Cache (if needed)
+
+```bash
+# Clear embeddings cache
+rm -rf ~/.cache/huggingface/
+
+# Clear GPT4All cache
+rm -rf ~/.cache/gpt4all/
+
+# Re-download
+python setup_models.py
+```

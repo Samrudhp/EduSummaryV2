@@ -36,8 +36,24 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.on_event("startup")
 async def startup_event():
-    """Load existing vectorstore on startup if available"""
+    """
+    Load existing vectorstore on startup if available
+    Models are automatically cached and reused from:
+    - Embeddings: ~/.cache/huggingface/
+    - GPT4All: ~/.cache/gpt4all/
+    """
+    print("=" * 60)
+    print("EduSummary Backend Starting...")
+    print("=" * 60)
+    
+    # Load vectorstore if exists
     rag_service.load_vectorstore()
+    
+    print("\nModel Cache Locations:")
+    print(f"  - HuggingFace models: ~/.cache/huggingface/")
+    print(f"  - GPT4All models: ~/.cache/gpt4all/")
+    print("\nModels will be downloaded once and cached for future use.")
+    print("=" * 60)
 
 
 @app.get("/")
