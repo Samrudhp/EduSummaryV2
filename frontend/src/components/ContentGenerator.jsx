@@ -39,9 +39,37 @@ const ContentGenerator = ({ textbookData }) => {
     try {
       const results = {};
       
+      // Map frontend types to backend API format
+      const typeMapping = {
+        summary: 'summary',
+        conceptMap: 'conceptmap',
+        tricks: 'tricks'
+      };
+
+      // Map backend response keys to frontend keys
+      const responseMapping = {
+        summary: 'summary',
+        concept_map: 'conceptMap',
+        tricks: 'tricks'
+      };
+      
       for (const type of selectedTypes) {
-        const response = await generateChapter(selectedChapter, type);
-        results[type] = response.content;
+        const apiType = typeMapping[type];
+        const response = await generateChapter(selectedChapter, apiType);
+        
+        console.log('API Response for', type, ':', response);
+        
+        // Map the response key back to frontend format
+        const responseKey = Object.keys(responseMapping).find(
+          key => responseMapping[key] === type
+        );
+        
+        if (response[responseKey]) {
+          results[type] = response[responseKey];
+          console.log('Mapped content for', type, ':', response[responseKey]);
+        } else {
+          console.warn('No content found for key:', responseKey, 'in response:', response);
+        }
       }
 
       setGeneratedContent(results);
