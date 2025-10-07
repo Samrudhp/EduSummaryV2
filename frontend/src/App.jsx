@@ -19,7 +19,7 @@ function App() {
       if (status.ready) {
         setTextbookData({
           name: status.textbook_name,
-          chapters: Array.from({ length: 10 }, (_, i) => i + 1)
+          sections: status.sections || []
         });
         setActiveTab('generate');
       }
@@ -30,8 +30,8 @@ function App() {
 
   const handleUploadSuccess = (data) => {
     setTextbookData({
-      name: data.filename,
-      chapters: Array.from({ length: 10 }, (_, i) => i + 1)
+      name: data.textbook_name,
+      sections: data.sections || []
     });
     setActiveTab('generate');
   };

@@ -9,10 +9,10 @@ from fastapi.responses import JSONResponse
 
 from models.schemas import (
     UploadResponse, StatusResponse, GenerateRequest, 
-    GenerateResponse, AskRequest, AskResponse, QnAItem
+    GenerateResponse, AskRequest, AskResponse, QnAItem, SectionInfo
 )
 from services.rag_service import RAGService
-from utils.text_extractor import extract_text, chunk_text
+from utils.text_extractor import extract_text, chunk_text, extract_sections
 
 # Initialize FastAPI app
 app = FastAPI(title="EduSummary API", version="1.0.0")
@@ -87,7 +87,7 @@ async def upload_textbook(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Extract text
+        # Extract text (with page markers for better section detection)
         print(f"Extracting text from {file.filename}...")
         text = extract_text(file_path, file_type)
         
@@ -97,19 +97,51 @@ async def upload_textbook(file: UploadFile = File(...)):
                 detail="Could not extract sufficient text from the file."
             )
         
-        # Chunk text
-        print("Chunking text...")
-        chunks = chunk_text(text, chunk_size=500, overlap=50)
+        # Extract sections from the document (BEFORE chunking)
+        print("Analyzing document structure and extracting sections...")
+        sections = extract_sections(text)
+        
+        if not sections or len(sections) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract any sections from the document."
+            )
+        
+        print(f"✓ Found {len(sections)} sections in document")
+        
+        # Chunk text (now we chunk the full text with section metadata)
+        print("Creating chunks from document...")
+        all_chunks = []
+        
+        # Create chunks for each section separately
+        for section in sections:
+            section_chunks = chunk_text(
+                section['content'], 
+                chunk_size=300, 
+                overlap=30,
+                section_id=section['id'],
+                section_title=section['title']
+            )
+            all_chunks.extend(section_chunks)
+        
+        print(f"✓ Created {len(all_chunks)} chunks from {len(sections)} sections")
         
         # Create vectorstore
         print("Creating vectorstore...")
-        rag_service.create_vectorstore(chunks, file.filename)
+        rag_service.create_vectorstore(all_chunks, file.filename, sections)
+        
+        # Convert sections to response format
+        section_infos = [
+            SectionInfo(id=s["id"], title=s["title"], preview=s["preview"])
+            for s in sections
+        ]
         
         return UploadResponse(
             status="success",
             message="Textbook processed successfully. System ready.",
             textbook_name=file.filename,
-            total_chunks=len(chunks)
+            total_chunks=len(all_chunks),
+            sections=section_infos
         )
     
     except HTTPException:
@@ -125,10 +157,20 @@ async def get_status():
     Get system status
     """
     status = rag_service.get_status()
+    
+    # Convert sections to response format
+    section_infos = None
+    if status.get('sections'):
+        section_infos = [
+            SectionInfo(id=s["id"], title=s["title"], preview=s["preview"])
+            for s in status['sections']
+        ]
+    
     return StatusResponse(
         ready=status['ready'],
         textbook_name=status.get('textbook_name'),
         total_chunks=status.get('total_chunks'),
+        sections=section_infos,
         message="System ready" if status['ready'] else "No textbook uploaded"
     )
 
@@ -136,7 +178,7 @@ async def get_status():
 @app.post("/generate", response_model=GenerateResponse)
 async def generate_outputs(request: GenerateRequest):
     """
-    Generate chapter outputs (summary, concept map, tricks, Q&A)
+    Generate section outputs (summary, concept map, tricks, Q&A)
     """
     if not rag_service.is_ready():
         raise HTTPException(
@@ -146,25 +188,29 @@ async def generate_outputs(request: GenerateRequest):
     
     try:
         option = request.option.lower()
-        chapter = request.chapter
+        section_id = request.section_id
         
-        response_data = {"chapter": chapter}
+        # Get section title
+        section = rag_service.get_section_info(section_id)
+        section_title = section['title'] if section else section_id
+        
+        response_data = {"section_id": section_id, "section_title": section_title}
         
         if option == "summary" or option == "all":
-            print(f"Generating summary for chapter {chapter}...")
-            response_data["summary"] = rag_service.generate_summary(chapter)
+            print(f"Generating summary for section {section_id}...")
+            response_data["summary"] = rag_service.generate_summary(section_id)
         
         if option == "conceptmap" or option == "all":
-            print(f"Generating concept map for chapter {chapter}...")
-            response_data["concept_map"] = rag_service.generate_concept_map(chapter)
+            print(f"Generating concept map for section {section_id}...")
+            response_data["concept_map"] = rag_service.generate_concept_map(section_id)
         
         if option == "tricks" or option == "all":
-            print(f"Generating tricks for chapter {chapter}...")
-            response_data["tricks"] = rag_service.generate_tricks(chapter)
+            print(f"Generating tricks for section {section_id}...")
+            response_data["tricks"] = rag_service.generate_tricks(section_id)
         
         if option == "all":
-            print(f"Generating Q&A for chapter {chapter}...")
-            qna_list = rag_service.generate_qna(chapter)
+            print(f"Generating Q&A for section {section_id}...")
+            qna_list = rag_service.generate_qna(section_id)
             response_data["qna"] = [QnAItem(**item) for item in qna_list]
         
         return GenerateResponse(**response_data)

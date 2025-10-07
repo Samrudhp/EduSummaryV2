@@ -24,6 +24,7 @@ class RAGService:
         self.llm = None
         self.textbook_name = None
         self.total_chunks = 0
+        self.sections = []  # Store sections information
         
         os.makedirs(persist_dir, exist_ok=True)
         os.makedirs(model_path, exist_ok=True)
@@ -81,7 +82,7 @@ class RAGService:
         )
         print("GPT4All model loaded successfully (cached for future use)!")
     
-    def create_vectorstore(self, chunks: List[Dict], textbook_name: str):
+    def create_vectorstore(self, chunks: List[Dict], textbook_name: str, sections: List[Dict] = None):
         """Create and persist FAISS vectorstore"""
         print(f"Creating vectorstore with {len(chunks)} chunks...")
         
@@ -104,16 +105,18 @@ class RAGService:
         vectorstore_path = os.path.join(self.persist_dir, "faiss_index")
         self.vectorstore.save_local(vectorstore_path)
         
-        # Save metadata
+        # Save metadata including sections
         metadata = {
             'textbook_name': textbook_name,
-            'total_chunks': len(chunks)
+            'total_chunks': len(chunks),
+            'sections': sections or []
         }
         with open(os.path.join(self.persist_dir, "metadata.pkl"), 'wb') as f:
             pickle.dump(metadata, f)
         
         self.textbook_name = textbook_name
         self.total_chunks = len(chunks)
+        self.sections = sections or []
         
         print(f"Vectorstore created and persisted successfully!")
     
@@ -134,10 +137,11 @@ class RAGService:
             
             with open(metadata_path, 'rb') as f:
                 metadata = pickle.load(f)
-                self.textbook_name = metadata['textbook_name']
-                self.total_chunks = metadata['total_chunks']
+                self.textbook_name = metadata.get('textbook_name')
+                self.total_chunks = metadata.get('total_chunks', 0)
+                self.sections = metadata.get('sections', [])
             
-            print(f"Vectorstore loaded: {self.textbook_name} ({self.total_chunks} chunks)")
+            print(f"Vectorstore loaded: {self.textbook_name} ({self.total_chunks} chunks, {len(self.sections)} sections)")
             return True
         except Exception as e:
             print(f"Error loading vectorstore: {e}")
@@ -152,31 +156,57 @@ class RAGService:
         return {
             'ready': self.is_ready(),
             'textbook_name': self.textbook_name,
-            'total_chunks': self.total_chunks
+            'total_chunks': self.total_chunks,
+            'sections': self.sections
         }
     
-    def retrieve_context(self, query: str, k: int = 5) -> List[Document]:
-        """Retrieve relevant chunks from vectorstore"""
+    def get_section_info(self, section_id: str) -> Optional[Dict]:
+        """Get information about a specific section"""
+        for section in self.sections:
+            if section['id'] == section_id:
+                return section
+        return None
+    
+    def retrieve_context(self, query: str, k: int = 5, section_id: str = None) -> List[Document]:
+        """
+        Retrieve relevant chunks from vectorstore
+        If section_id provided, filter to only that section's chunks
+        """
         if not self.is_ready():
             raise ValueError("Vectorstore not initialized. Please upload a textbook first.")
         
-        retriever = self.vectorstore.as_retriever(search_kwargs={"k": k})
+        retriever = self.vectorstore.as_retriever(search_kwargs={"k": k * 3})  # Get more for filtering
         docs = retriever.get_relevant_documents(query)
+        
+        # Filter by section if specified
+        if section_id:
+            docs = [doc for doc in docs if doc.metadata.get('section_id') == section_id]
+            docs = docs[:k]  # Limit to k after filtering
+        else:
+            docs = docs[:k]
+        
         return docs
     
-    def generate_summary(self, chapter: str) -> str:
-        """Generate chapter summary"""
+    def generate_summary(self, section_id: str) -> str:
+        """Generate summary for a specific section"""
         self._initialize_llm()
         
-        query = f"Chapter {chapter} summary main topics concepts"
-        docs = self.retrieve_context(query, k=3)
+        # Get section info
+        section = self.get_section_info(section_id)
+        section_title = section['title'] if section else section_id
+        
+        query = f"{section_title} summary main topics concepts key points"
+        # Retrieve context filtered by section
+        docs = self.retrieve_context(query, k=3, section_id=section_id)
+        
+        print(f"Retrieved {len(docs)} chunks for section '{section_title}'")
         
         # Limit context to ~800 tokens max
         context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
-            input_variables=["context", "chapter"],
-            template="""Based on the following content from Chapter {chapter}, create a comprehensive summary:
+            input_variables=["context", "section"],
+            template="""Based on the following content from {section}, create a comprehensive summary:
 
 Context:
 {context}
@@ -190,23 +220,30 @@ Summary:"""
         )
         
         chain = LLMChain(llm=self.llm, prompt=prompt)
-        summary = chain.run(context=context, chapter=chapter)
+        summary = chain.run(context=context, section=section_title)
         
         return summary.strip()
     
-    def generate_concept_map(self, chapter: str) -> str:
-        """Generate concept map"""
+    def generate_concept_map(self, section_id: str) -> str:
+        """Generate concept map for a specific section"""
         self._initialize_llm()
         
-        query = f"Chapter {chapter} concepts relationships hierarchy"
-        docs = self.retrieve_context(query, k=3)
+        # Get section info
+        section = self.get_section_info(section_id)
+        section_title = section['title'] if section else section_id
+        
+        query = f"{section_title} concepts relationships hierarchy"
+        # Retrieve context filtered by section
+        docs = self.retrieve_context(query, k=3, section_id=section_id)
+        
+        print(f"Retrieved {len(docs)} chunks for section '{section_title}'")
         
         # Limit context to ~800 tokens max
         context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
-            input_variables=["context", "chapter"],
-            template="""Based on the following content from Chapter {chapter}, create a concept map showing relationships:
+            input_variables=["context", "section"],
+            template="""Based on the following content from {section}, create a concept map showing relationships:
 
 Context:
 {context}
@@ -221,23 +258,30 @@ Concept Map:"""
         )
         
         chain = LLMChain(llm=self.llm, prompt=prompt)
-        concept_map = chain.run(context=context, chapter=chapter)
+        concept_map = chain.run(context=context, section=section_title)
         
         return concept_map.strip()
     
-    def generate_tricks(self, chapter: str) -> str:
-        """Generate mnemonics and tricks"""
+    def generate_tricks(self, section_id: str) -> str:
+        """Generate mnemonics and tricks for a specific section"""
         self._initialize_llm()
         
-        query = f"Chapter {chapter} important concepts formulas definitions"
-        docs = self.retrieve_context(query, k=3)
+        # Get section info
+        section = self.get_section_info(section_id)
+        section_title = section['title'] if section else section_id
+        
+        query = f"{section_title} important concepts formulas definitions"
+        # Retrieve context filtered by section
+        docs = self.retrieve_context(query, k=3, section_id=section_id)
+        
+        print(f"Retrieved {len(docs)} chunks for section '{section_title}'")
         
         # Limit context to ~800 tokens max
         context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
-            input_variables=["context", "chapter"],
-            template="""Based on the following content from Chapter {chapter}, create memory tricks and mnemonics:
+            input_variables=["context", "section"],
+            template="""Based on the following content from {section}, create memory tricks and mnemonics:
 
 Context:
 {context}
@@ -252,23 +296,30 @@ Tricks and Mnemonics:"""
         )
         
         chain = LLMChain(llm=self.llm, prompt=prompt)
-        tricks = chain.run(context=context, chapter=chapter)
+        tricks = chain.run(context=context, section=section_title)
         
         return tricks.strip()
     
-    def generate_qna(self, chapter: str) -> List[Dict[str, str]]:
-        """Generate Q&A pairs"""
+    def generate_qna(self, section_id: str) -> List[Dict[str, str]]:
+        """Generate Q&A pairs for a specific section"""
         self._initialize_llm()
         
-        query = f"Chapter {chapter} key concepts important topics"
-        docs = self.retrieve_context(query, k=3)
+        # Get section info
+        section = self.get_section_info(section_id)
+        section_title = section['title'] if section else section_id
+        
+        query = f"{section_title} key concepts important topics"
+        # Retrieve context filtered by section
+        docs = self.retrieve_context(query, k=3, section_id=section_id)
+        
+        print(f"Retrieved {len(docs)} chunks for section '{section_title}'")
         
         # Limit context to ~800 tokens max
         context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
-            input_variables=["context", "chapter"],
-            template="""Based on the following content from Chapter {chapter}, create 5 important question-answer pairs:
+            input_variables=["context", "section"],
+            template="""Based on the following content from {section}, create 5 important question-answer pairs:
 
 Context:
 {context}
@@ -286,7 +337,7 @@ Q&A:"""
         )
         
         chain = LLMChain(llm=self.llm, prompt=prompt)
-        qna_text = chain.run(context=context, chapter=chapter)
+        qna_text = chain.run(context=context, section=section_title)
         
         # Parse Q&A pairs
         qna_list = []

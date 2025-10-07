@@ -51,19 +51,19 @@ export async function getStatus() {
 }
 
 /**
- * Generate chapter outputs
- * @param {string} chapter - Chapter number/name
+ * Generate section outputs
+ * @param {string} sectionId - Section ID
  * @param {string} option - 'summary', 'conceptmap', 'tricks', or 'all'
  * @returns {Promise<Object>} Generated content
  */
-export async function generateChapter(chapter, option) {
+export async function generateChapter(sectionId, option) {
   try {
     const response = await fetch(`${API_BASE_URL}/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ chapter, option }),
+      body: JSON.stringify({ section_id: sectionId, option }),
     });
 
     if (!response.ok) {
