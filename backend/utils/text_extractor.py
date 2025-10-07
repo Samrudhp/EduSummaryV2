@@ -91,7 +91,7 @@ def extract_text(file_path: str, file_type: str) -> str:
         raise ValueError(f"Unsupported file type: {file_type}")
 
 
-def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[Dict[str, any]]:
+def chunk_text(text: str, chunk_size: int = 300, overlap: int = 30) -> List[Dict[str, any]]:
     """
     Chunk text into smaller pieces with metadata
     chunk_size: approximate number of tokens per chunk

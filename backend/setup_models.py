@@ -18,7 +18,7 @@ print("   Cache location: ~/.cache/huggingface/")
 print()
 
 try:
-    from sentence_transformers import SentenceTransformer
+    from langchain_community.embeddings import HuggingFaceEmbeddings
     
     model_name = "sentence-transformers/all-mpnet-base-v2"
     cache_folder = os.path.expanduser("~/.cache/huggingface/hub")
@@ -27,14 +27,21 @@ try:
     if os.path.exists(cache_folder):
         print("   ℹ️  HuggingFace cache directory exists")
     
-    print("   ⏳ Loading/downloading model...")
-    model = SentenceTransformer(model_name, cache_folder=cache_folder)
-    print("   ✅ Embeddings model cached successfully!")
+    print("   ⏳ Loading/downloading model (this may take a few minutes)...")
+    embeddings = HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True},
+        cache_folder=cache_folder
+    )
+    # Test the embeddings
+    test_embedding = embeddings.embed_query("test")
+    print(f"   ✅ Embeddings model cached successfully! (dimension: {len(test_embedding)})")
     print()
     
 except Exception as e:
     print(f"   ❌ Error: {e}")
-    print("   Please install: pip install sentence-transformers")
+    print("   Please check your installation")
     sys.exit(1)
 
 # 2. Download and cache GPT4All model

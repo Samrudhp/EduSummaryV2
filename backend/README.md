@@ -13,10 +13,23 @@ FastAPI backend for EduSummary - A RAG-powered textbook summarization system.
 
 ### 1. Create Virtual Environment
 
+**Using pyenv (Recommended):**
+```bash
+# Set Python version with pyenv
+pyenv shell 3.10.11  # or your preferred version
+
+# Create venv with pyenv Python
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+**Using system Python:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
+
+**Note:** The `start-backend.sh` script automatically detects and uses pyenv Python if available.
 
 ### 2. Install Dependencies
 

@@ -4,9 +4,9 @@ RAG Service using LangChain, FAISS, and GPT4All
 import os
 import pickle
 from typing import List, Dict, Optional
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.llms import GPT4All
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.llms import GPT4All
 from langchain.chains import RetrievalQA, LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -77,7 +77,6 @@ class RAGService:
             model=model_name,  # Just model name - GPT4All handles cache lookup
             max_tokens=2048,
             temp=0.7,
-            n_ctx=2048,
             verbose=False
         )
         print("GPT4All model loaded successfully (cached for future use)!")
@@ -170,9 +169,10 @@ class RAGService:
         self._initialize_llm()
         
         query = f"Chapter {chapter} summary main topics concepts"
-        docs = self.retrieve_context(query, k=10)
+        docs = self.retrieve_context(query, k=3)
         
-        context = "\n\n".join([doc.page_content for doc in docs])
+        # Limit context to ~800 tokens max
+        context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
             input_variables=["context", "chapter"],
@@ -199,9 +199,10 @@ Summary:"""
         self._initialize_llm()
         
         query = f"Chapter {chapter} concepts relationships hierarchy"
-        docs = self.retrieve_context(query, k=10)
+        docs = self.retrieve_context(query, k=3)
         
-        context = "\n\n".join([doc.page_content for doc in docs])
+        # Limit context to ~800 tokens max
+        context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
             input_variables=["context", "chapter"],
@@ -229,9 +230,10 @@ Concept Map:"""
         self._initialize_llm()
         
         query = f"Chapter {chapter} important concepts formulas definitions"
-        docs = self.retrieve_context(query, k=8)
+        docs = self.retrieve_context(query, k=3)
         
-        context = "\n\n".join([doc.page_content for doc in docs])
+        # Limit context to ~800 tokens max
+        context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
             input_variables=["context", "chapter"],
@@ -259,9 +261,10 @@ Tricks and Mnemonics:"""
         self._initialize_llm()
         
         query = f"Chapter {chapter} key concepts important topics"
-        docs = self.retrieve_context(query, k=8)
+        docs = self.retrieve_context(query, k=3)
         
-        context = "\n\n".join([doc.page_content for doc in docs])
+        # Limit context to ~800 tokens max
+        context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
             input_variables=["context", "chapter"],
@@ -305,8 +308,9 @@ Q&A:"""
         """Answer free-form question"""
         self._initialize_llm()
         
-        docs = self.retrieve_context(question, k=5)
-        context = "\n\n".join([doc.page_content for doc in docs])
+        docs = self.retrieve_context(question, k=3)
+        # Limit context to ~800 tokens max
+        context = "\n\n".join([doc.page_content[:800] for doc in docs[:3]])
         
         prompt = PromptTemplate(
             input_variables=["context", "question"],
