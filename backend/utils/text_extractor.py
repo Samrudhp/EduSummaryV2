@@ -94,14 +94,13 @@ def extract_text(file_path: str, file_type: str) -> str:
 
 def extract_sections(text: str) -> List[Dict[str, str]]:
     """
-    SOTA: Advanced section extraction using multiple techniques:
     1. Document structure analysis (headings, formatting)
     2. Semantic coherence (topic shifts)
     3. Statistical features (line length, capitalization patterns)
     4. Academic paper structure detection
     """
     print("\n" + "="*60)
-    print("🔍 ANALYZING DOCUMENT WITH SOTA TECHNIQUES...")
+    print("🔍 ANALYZING DOCUMENT WITH TECHNIQUES...")
     print("="*60)
     
     sections = []
